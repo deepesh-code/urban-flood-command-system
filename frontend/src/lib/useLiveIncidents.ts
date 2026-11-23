@@ -1,35 +1,71 @@
+
 "use client";
 
 import { useEffect, useRef } from "react";
 import { getSupabase } from "./supabase";
 
-/**
- * Live-update hook. Polling always runs (5 s). When Supabase env vars are
- * configured, postgres_changes on the incidents table trigger an immediate
- * refetch — so a second browser sees updates in near real time either way.
- */
-export function useLiveRefetch(refetch: () => void, enabled = true) {
+export function useLiveRefetch(
+  refetch: () => void | Promise<void>,
+  enabled = true
+) {
   const ref = useRef(refetch);
+  const running = useRef(false);
+
   ref.current = refetch;
 
   useEffect(() => {
     if (!enabled) return;
-    const interval = setInterval(() => ref.current(), 5000);
+
+    let active = true;
+
+    const safeRefetch = async () => {
+      if (!active || running.current) return;
+
+      running.current = true;
+
+      try {
+        await ref.current();
+      } catch (error) {
+        console.error("Live refresh failed:", error);
+      } finally {
+        running.current = false;
+      }
+    };
+
+    const interval = setInterval(() => {
+      void safeRefetch();
+    }, 5000);
+
     const supabase = getSupabase();
-    let channel: ReturnType<NonNullable<typeof supabase>["channel"]> | null = null;
+
+    let channel:
+      | ReturnType<NonNullable<typeof supabase>["channel"]>
+      | null = null;
+
     if (supabase) {
       channel = supabase
         .channel("incidents-live")
         .on(
           "postgres_changes",
-          { event: "*", schema: "public", table: "incidents" },
-          () => ref.current()
+          {
+            event: "*",
+            schema: "public",
+            table: "incidents",
+          },
+          () => {
+            void safeRefetch();
+          }
         )
         .subscribe();
     }
+
     return () => {
+      active = false;
       clearInterval(interval);
-      if (supabase && channel) supabase.removeChannel(channel);
+
+      if (supabase && channel) {
+        void supabase.removeChannel(channel);
+      }
     };
   }, [enabled]);
 }

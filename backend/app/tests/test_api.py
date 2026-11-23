@@ -75,27 +75,58 @@ def test_incident_lifecycle_and_permissions():
     assert any(i["id"] == incident["id"] for i in res.json()["incidents"])
 
 
+
 def test_assignment_flow():
     inc = client.post("/api/v1/incidents", json={
-        "title": "Blocked drain at Beta 2 market", "latitude": 28.4870,
-        "longitude": 77.5160, "severity": "medium",
+        "title": "Blocked drain at Beta 2 market",
+        "latitude": 28.4870,
+        "longitude": 77.5160,
+        "severity": "medium",
     }).json()
+
     team = client.get("/api/v1/teams").json()["teams"][0]
 
     # Viewer cannot assign
     res = client.post("/api/v1/assignments", json={
-        "incident_id": inc["id"], "team_id": team["id"],
+        "incident_id": inc["id"],
+        "team_id": team["id"],
     }, headers={"X-Role": "viewer"})
     assert res.status_code == 403
 
-    # Operator assigns -> incident becomes 'assigned'
-    res = client.post("/api/v1/assignments", json={
-        "incident_id": inc["id"], "team_id": team["id"], "assigned_by": "demo-operator",
-    }, headers={"X-Role": "operator"})
+    # Operator assigns successfully
+    payload = {
+        "incident_id": inc["id"],
+        "team_id": team["id"],
+        "assigned_by": "demo-operator",
+    }
+
+    res = client.post(
+        "/api/v1/assignments",
+        json=payload,
+        headers={"X-Role": "operator"},
+    )
     assert res.status_code == 201
+
+    # A second assignment for the same incident must be rejected
+    duplicate = client.post(
+        "/api/v1/assignments",
+        json=payload,
+        headers={"X-Role": "operator"},
+    )
+    assert duplicate.status_code == 409
+
+    # Incident remains assigned
     updated = client.get("/api/v1/incidents").json()["incidents"]
     mine = next(i for i in updated if i["id"] == inc["id"])
     assert mine["status"] == "assigned"
+
+    # Only one assignment exists for this incident
+    assignments = client.get("/api/v1/assignments").json()["assignments"]
+    mine_assignments = [
+        a for a in assignments if a["incident_id"] == inc["id"]
+    ]
+    assert len(mine_assignments) == 1
+
 
 
 def test_scenario_simulator():
