@@ -1,8 +1,11 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.db import backend_name, list_zones
 from app.services.weather_service import GREATER_NOIDA, get_weather
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["weather"])
 
 
@@ -30,9 +33,10 @@ async def weather(
     try:
         data = await get_weather(lat, lng)
     except Exception:
+        logger.exception("Open-Meteo weather request failed")
         raise HTTPException(
             status_code=502,
-            detail="Weather service unavailable. Check internet connectivity.",
+            detail="Weather service unavailable. Check backend logs.",
         )
 
     return {
