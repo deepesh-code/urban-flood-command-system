@@ -65,7 +65,10 @@ create table if not exists public.incidents (
 create or replace function public.set_incident_location()
 returns trigger language plpgsql as $$
 begin
-    new.location := ST_SetSRID(ST_MakePoint(new.longitude, new.latitude), 4326)::extensions.geography;
+    new.location := extensions.ST_SetSRID(
+    extensions.ST_MakePoint(new.longitude, new.latitude),
+    4326
+)::extensions.geography;
     return new;
 end $$;
 

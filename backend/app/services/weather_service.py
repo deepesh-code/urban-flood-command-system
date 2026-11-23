@@ -5,9 +5,10 @@ not a physical rain-gauge reading. Every response is labelled
 `data_type: "weather_model_forecast"` and carries a `retrieved_at`
 timestamp so the UI never presents it as a sensor observation.
 """
-
 import time
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -58,8 +59,36 @@ async def get_weather(latitude: float, longitude: float) -> dict[str, Any]:
 
 
 def accumulated_rainfall_next_hours(hourly: dict | None, hours: int = 3) -> float:
-    """Sum the model's precipitation forecast over the next N hours."""
+    """Sum forecast precipitation from the current local hour onward."""
+
+    if hours < 1:
+        raise ValueError("hours must be at least 1")
+
     if not hourly:
         return 0.0
+
+    times = hourly.get("time") or []
     values = hourly.get("precipitation") or []
-    return round(sum(v or 0.0 for v in values[:hours]), 2)
+
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    current_hour = now.replace(minute=0, second=0, microsecond=0)
+
+    total = 0.0
+    count = 0
+
+    for timestamp, value in zip(times, values):
+        forecast_time = datetime.fromisoformat(timestamp)
+
+        if forecast_time.tzinfo is None:
+            forecast_time = forecast_time.replace(
+                tzinfo=ZoneInfo("Asia/Kolkata")
+            )
+
+        if forecast_time >= current_hour:
+            total += float(value or 0.0)
+            count += 1
+
+            if count == hours:
+                break
+
+    return round(total, 2)
