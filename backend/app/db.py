@@ -156,15 +156,34 @@ def _rows(cur: sqlite3.Cursor) -> list[dict[str, Any]]:
 # Supabase backend
 # ---------------------------------------------------------------------------
 
+
 def _supabase():
     global _supabase_client
+
     if _supabase_client is None:
-        from supabase import create_client  # imported lazily: heavy dependency
+        import httpx
+        from supabase import ClientOptions, create_client
+
+        http_client = httpx.Client(
+            timeout=120.0,
+            verify=True,
+            follow_redirects=True,
+            http2=True,
+        )
+
+        options = ClientOptions(
+            postgrest_client_timeout=None,
+            httpx_client=http_client,
+        )
 
         _supabase_client = create_client(
-            settings.supabase_url, settings.supabase_service_role_key
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+            options=options,
         )
+
     return _supabase_client
+
 
 
 # ---------------------------------------------------------------------------
