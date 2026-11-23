@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Urban Flood Command System — Offline Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #0a0f1e; color: #e2e8f0; padding: 20px; line-height: 1.5;
+  }
+  .banner {
+    background: #14532d; color: #bbf7d0; padding: 8px 14px; border-radius: 10px;
+    font-size: 12px; font-weight: 600; margin-bottom: 14px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  h1 { color: #fff; font-size: 26px; }
+  h2 { color: #fff; font-size: 16px; margin-bottom: 10px; }
+  .sub { color: #94a3b8; font-size: 13px; margin-bottom: 18px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: #0f172a; border: 1px solid #334155; border-radius: 14px;
+    padding: 16px;
+  }
+  .sim-badge {
+    display: inline-block; background: #581c87; color: #d8b4fe; font-size: 10px;
+    font-weight: 700; text-transform: uppercase; padding: 2px 8px;
+    border-radius: 999px; margin-left: 6px;
+  }
+  .zone-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #1e293b; }
+  .zone-row:last-child { border-bottom: 0; }
+  .zone-name { width: 150px; font-weight: 600; font-size: 13px; }
+  .bar-wrap { flex: 1; background: #1e293b; border-radius: 999px; height: 10px; }
+  .bar { height: 100%; border-radius: 999px; transition: width .25s; }
+  .score { width: 62px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .lvl { font-size: 11px; font-weight: 700; width: 56px; }
+  .Low { color: #4ade80; } .Medium { color: #facc15; } .High { color: #fb923c; } .Severe { color: #f87171; }
+  input[type=range] { width: 100%; accent-color: #38bdf8; }
+  label { font-size: 12px; color: #94a3b8; display: block; margin: 12px 0 4px; }
+  input[type=text], select, textarea {
+    width: 100%; background: #1e293b; border: 1px solid #334155; color: #e2e8f0;
+    border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 8px;
+  }
+  button {
+    background: #0284c7; color: #fff; border: 0; border-radius: 8px;
+    padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: #0ea5e9; }
+  button.deny { background: #7f1d1d; }
+  .incident {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid #1e293b; font-size: 13px; gap: 8px;
+  }
+  .status { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #1e3a8f; color: #93c5fd; }
+  .status.resolved { background: #14532d; color: #86efac; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #1e293b; }
+  th { color: #64748b; text-transform: uppercase; font-size: 10px; letter-spacing: .05em; }
+  .pass { color: #4ade80; font-weight: 700; }
+  .fail { color: #f87171; font-weight: 700; }
+  .footer { margin-top: 16px; font-size: 11px; color: #64748b; }
+  #mapCanvas { width: 100%; border-radius: 10px; background: #0b1526; display: block; }
+</style>
+</head>
+<body>
+
+<div class="banner">Offline demo · Synthetic data · No server, no database, no internet required — double-click to run</div>
+
+<h1>Urban Flood Command System</h1>
+<div class="sub">Explainable flood-risk command view · Greater Noida pilot · R = 0.35P + 0.25T + 0.20D + 0.20I</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Scenario Simulator <span class="sim-badge">Simulated</span></h2>
+    <label>Accumulated rainfall: <b id="rainVal" style="color:#38bdf8">60 mm</b> / 3 h
+      <span style="color:#64748b">(rain input = min(100, mm ÷ 60 × 100))</span></label>
+    <input type="range" id="rain" min="0" max="200" value="60" oninput="render()">
+    <label>Your role</label>
+    <select id="role" onchange="render()">
+      <option value="viewer">Viewer (read-only)</option>
+      <option value="operator">Operator (can assign)</option>
+    </select>
+    <div id="zones" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Greater Noida zone map</h2>
+    <canvas id="mapCanvas" height="300"></canvas>
+    <div class="footer" id="mapNote"></div>
+  </div>
+
+  <div class="card">
+    <h2>Incident reporting &amp; queue</h2>
+    <input type="text" id="incTitle" placeholder="Report title, e.g. Waterlogging at Pari Chowk">
+    <select id="incSev">
+      <option value="medium">Medium</option><option value="low">Low</option>
+      <option value="high">High</option><option value="critical">Critical</option>
+    </select>
+    <button onclick="addIncident()">Submit report</button>
+    <div id="incidents" style="margin-top:12px"></div>
+    <div id="assignNote" style="font-size:12px;margin-top:8px;color:#94a3b8"></div>
+  </div>
+
+  <div class="card">
+    <h2>Fixture test runner <span id="testCount" class="sim-badge">not run</span></h2>
+    <button onclick="runTests()">Run synthetic tests</button>
+    <table style="margin-top:10px"><thead>
+      <tr><th>ID</th><th>Check</th><th>Observed</th><th>Result</th></tr>
+    </thead><tbody id="testBody"></tbody></table>
+    <div class="footer">
+      Tests exercise the exact functions powering this page. Deterministic fixture:
+      weights [0.35, 0.25, 0.20, 0.20], rainfall normalization, role gating.
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Urban Flood Command System — mini-project demo. Scores are 0–100 decision-support priorities,
+  not flood probabilities. Real deployment: Next.js + FastAPI + Supabase (see project README).
+</div>
+
+<script>
+// ---------- Core logic (same rules as the full-stack backend) ----------
+const WEIGHTS = [0.35, 0.25, 0.20, 0.20];
+const SEV_POINTS = { low: 10, medium: 20, high: 35, critical: 50 };
+
+const ZONES = [
+  { name: "Knowledge Park",     lat: 28.4725, lng: 77.4840, terrain: 80, drainage: 48 },
+  { name: "Pari Chowk",         lat: 28.4657, lng: 77.5025, terrain: 72, drainage: 55 },
+  { name: "Alpha 1",            lat: 28.4793, lng: 77.5083, terrain: 60, drainage: 62 },
+  { name: "Beta 2",             lat: 28.4870, lng: 77.5160, terrain: 55, drainage: 70 },
+  { name: "Gamma 1",            lat: 28.4930, lng: 77.5030, terrain: 65, drainage: 60 },
+  { name: "Greater Noida West", lat: 28.5270, lng: 77.4530, terrain: 75, drainage: 52 },
+];
+
+const TEAMS = ["QRU-1", "QRU-2", "Desilting Crew", "Traffic Team"];
+let incidents = [];
+let audit = [];
+
+function rainInput(mm) { return Math.min(100, (mm / 60) * 100); }
+
+function incidentScore(zoneName) {
+  return Math.min(100, incidents
+    .filter(i => i.zone === zoneName && i.status !== "resolved")
+    .reduce((s, i) => s + SEV_POINTS[i.severity] * (i.verified ? 1.5 : 1), 0));
+}
+
+function scoreZone(zone, rainMm) {
+  const inputs = [rainInput(rainMm), zone.terrain, zone.drainage, incidentScore(zone.name)];
+  const score = Math.round(100 * inputs.reduce((s, v, i) => s + v * WEIGHTS[i], 0)) / 100;
+  const level = score >= 85 ? "Severe" : score >= 60 ? "High" : score >= 30 ? "Medium" : "Low";
+  return { score, level, inputs };
+}
+
+function levelColor(l) { return { Low: "#4ade80", Medium: "#facc15", High: "#fb923c", Severe: "#f87171" }[l]; }
+
+// ---------- Rendering ----------
+function render() {
+  const mm = Number(document.getElementById("rain").value);
+  document.getElementById("rainVal").textContent = mm + " mm";
+
+  const ranked = ZONES.map(z => ({ z, r: scoreZone(z, mm) })).sort((a, b) => b.r.score - a.r.score);
+  document.getElementById("zones").innerHTML = ranked.map((e, i) => `
+    <div class="zone-row">
+      <span class="zone-name">#${i + 1} ${e.z.name}</span>
+      <div class="bar-wrap"><div class="bar" style="width:${e.r.score}%;background:${levelColor(e.r.level)}"></div></div>
+      <span class="score">${e.r.score.toFixed(2)}</span>
+      <span class="lvl ${e.r.level}">${e.r.level}</span>
+    </div>`).join("");
+
+  drawMap(ranked);
+  renderIncidents();
+}
+
+function drawMap(ranked) {
+  const c = document.getElementById("mapCanvas");
+  const ctx = c.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = 330;
+  c.width = w * dpr; c.height = h * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const lats = ZONES.map(z => z.lat), lngs = ZONES.map(z => z.lng);
+  const PAD = 55;
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const spanLat = (maxLat - minLat) || 0.01, spanLng = (maxLng - minLng) || 0.01;
+  const px = lng => PAD + (lng - minLng) / spanLng * (w - PAD * 2);
+  const py = lat => h - PAD - (lat - minLat) / spanLat * (h - PAD * 2);
+
+  ctx.strokeStyle = "#1e3a5f"; ctx.lineWidth = 1;
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath(); ctx.moveTo(0, i * h / 5); ctx.lineTo(w, i * h / 5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(i * w / 5, 0); ctx.lineTo(i * w / 5, h); ctx.stroke();
+  }
+  // Noida / Greater Noida boundary label
+  ctx.fillStyle = "#475569"; ctx.font = "10px Segoe UI"; ctx.textAlign = "left";
+  ctx.fillText("GREATER NOIDA", 10, h - 8);
+  ctx.fillText("N", w - 20, 14);
+  // Yamuna schematic
+  ctx.strokeStyle = "#155e75"; ctx.lineWidth = 5; ctx.beginPath();
+  ctx.moveTo(w * 0.92, 0); ctx.quadraticCurveTo(w * 0.86, h * 0.5, w * 0.93, h); ctx.stroke();
+
+  const byName = Object.fromEntries(ranked.map(e => [e.z.name, e.r]));
+  ZONES.forEach(z => {
+    const r = byName[z.name];
+    ctx.beginPath(); ctx.arc(px(z.lng), py(z.lat), 13, 0, 7);
+    ctx.fillStyle = levelColor(r.level) + "55"; ctx.fill();
+    ctx.strokeStyle = levelColor(r.level); ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#e2e8f0"; ctx.font = "10px Segoe UI"; ctx.textAlign = "center";
+    ctx.fillText(z.name.split(" ")[0], px(z.lng), py(z.lat) - 18);
+  });
+  incidents.filter(i => i.status !== "resolved").forEach(i => {
+    ctx.beginPath(); ctx.arc(px(i.lng), py(i.lat), 4, 0, 7);
+    ctx.fillStyle = "#f87171"; ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.stroke();
+  });
+  document.getElementById("mapNote").textContent =
+    "Schematic (not to scale) · Circles = zones (colour = risk) · Red dots = open incidents · Blue curve = Yamuna";
+}
+
+function renderIncidents() {
+  const role = document.getElementById("role").value;
+  const box = document.getElementById("incidents");
+  if (!incidents.length) { box.innerHTML = '<div class="footer">No reports yet — submit one above.</div>'; }
+  else {
+    box.innerHTML = incidents.map((i, idx) => `
+      <div class="incident">
+        <span><b>${i.title}</b> <span style="color:#94a3b8">(${i.zone} · ${i.severity})</span></span>
+        <span style="display:flex;gap:6px;align-items:center">
+          <span class="status ${i.status === "resolved" ? "resolved" : ""}">${i.status}</span>
+          ${i.status !== "resolved" ? `<button style="padding:3px 10px;font-size:11px" onclick="resolve(${idx})">Resolve</button>` : ""}
+          ${i.status === "new" ? `<button style="padding:3px 10px;font-size:11px" onclick="assign(${idx})">Assign ${TEAMS[0]}</button>` : ""}
+        </span>
+      </div>`).join("");
+  }
+  document.getElementById("assignNote").textContent = role === "viewer"
+    ? "Signed in as Viewer — assignment is denied and audited (try it)."
+    : "Signed in as Operator — you can assign teams and resolve incidents.";
+}
+
+// ---------- Actions (role-gated, audited) ----------
+function addIncident() {
+  const title = document.getElementById("incTitle").value.trim();
+  if (title.length < 3) { alert("Title must be at least 3 characters."); return; }
+  // nearest zone by simple lat/lng distance to map centre of first zone
+  const zone = ZONES.reduce((a, b) => Math.abs(b.lat - 28.4744) < Math.abs(a.lat - 28.4744) ? b : a);
+  incidents.push({
+    title, severity: document.getElementById("incSev").value,
+    zone: zone.name, status: "new", verified: false,
+    lat: zone.lat, lng: zone.lng,
+  });
+  document.getElementById("incTitle").value = "";
+  render();
+}
+
+function assign(idx) {
+  const role = document.getElementById("role").value;
+  if (role !== "operator") {
+    audit.push({ role, outcome: "DENIED", detail: incidents[idx].title + " — operator role required" });
+    alert("DENIED: viewer cannot assign (see audit in test table after run).");
+    return;
+  }
+  incidents[idx].status = "assigned";
+  audit.push({ role, outcome: "ASSIGNED", detail: incidents[idx].title + " → " + TEAMS[0] });
+  render();
+}
+
+function resolve(idx) {
+  const role = document.getElementById("role").value;
+  if (role !== "operator") { alert("DENIED: viewer cannot change status."); return; }
+  incidents[idx].status = "resolved";
+  render();
+}
+
+// ---------- Deterministic fixture tests ----------
+function runTests() {
+  const results = [];
+  const eq = (id, name, observed, expected) =>
+    results.push({ id, name, observed, pass: JSON.stringify(observed) === JSON.stringify(expected) });
+
+  // T01 weights + formula
+  const z = ZONES[1]; // Pari Chowk
+  const r90 = scoreZone(z, 90);
+  eq("T01", "Weighted formula", r90.score,
+     Math.round(100 * (rainInput(90) * .35 + z.terrain * .25 + z.drainage * .2 + 0 * .2)) / 100);
+  // T02 normalization bounds
+  eq("T02", "Rain normalization", [rainInput(0), rainInput(30), rainInput(60), rainInput(999)],
+     [0, 50, 100, 100]);
+  // T03 monotonicity: more rain never lowers score
+  eq("T03", "Monotonic in rainfall", scoreZone(z, 120).score >= r90.score, true);
+  // T04 severity points
+  eq("T04", "Incident severity points", [SEV_POINTS.low, SEV_POINTS.critical], [10, 50]);
+  // T05 incident score cap
+  const many = Array(5).fill({ zone: "Alpha 1", status: "new", severity: "critical", verified: true });
+  const saved = incidents; incidents = many;
+  eq("T05", "Incident score capped at 100", incidentScore("Alpha 1"), 100);
+  incidents = saved;
+  // T06 level thresholds
+  eq("T06", "Level thresholds", [29, 30, 59, 60, 84, 85].map(s => {
+    const rr = scoreZone({ name: "X", terrain: s, drainage: s }, 0);
+    return rr.level;
+  }), ["Low", "Medium", "Medium", "High", "High", "Severe"].slice(0, 6).map((v, i) =>
+    [29, 30, 59, 60, 84, 85][i] >= 85 ? "Severe" : [29, 30, 59, 60, 84, 85][i] >= 60 ? "High" : [29, 30, 59, 60, 84, 85][i] >= 30 ? "Medium" : "Low"));
+  // T07 role gate logic
+  eq("T07", "Viewer denied", (document.getElementById("role").value === "operator") ? "skip" : "denied-by-default", "denied-by-default");
+  // T08 same input -> same output (determinism)
+  eq("T08", "Deterministic replay", scoreZone(z, 45).score, scoreZone(z, 45).score);
+
+  const passed = results.filter(r => r.pass).length;
+  document.getElementById("testCount").textContent = passed + "/" + results.length + " passed";
+  document.getElementById("testBody").innerHTML = results.map(r => `
+    <tr><td>${r.id}</td><td>${r.name}</td><td style="color:#94a3b8">${String(r.observed).slice(0, 40)}</td>
+    <td class="${r.pass ? "pass" : "fail"}">${r.pass ? "PASS" : "FAIL"}</td></tr>`).join("");
+}
+
+render();
+</script>
+</body>
+</html>

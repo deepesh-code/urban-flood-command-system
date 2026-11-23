@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+backend/flood.db
+
+# Node
+node_modules/
+.next/
+
+# Env — never commit keys
+.env
+.env.local
+backend/.env
+frontend/.env*.local
+
+# OS
+.DS_Store
+Thumbs.db
