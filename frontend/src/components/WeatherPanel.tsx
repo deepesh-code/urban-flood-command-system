@@ -83,7 +83,10 @@ export default function WeatherPanel({ weather }: { weather: WeatherResponse | n
       <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500">
         <Clock className="h-3 w-3" />
         Source: {weather.source} · Retrieved {weather.retrieved_at}
-        {weather.cached && " (cached)"} · Model forecast, not a rain-gauge reading
+        {weather.cached && " (cached)"} ·{" "}
+        {weather.data_type === "simulated_fallback"
+          ? "Synthetic demo data, not live weather"
+          : "Model forecast, not a rain-gauge reading"}
       </div>
     </div>
   );

@@ -29,35 +29,66 @@ def calculate(payload: RiskRequest):
 
 @router.post("/risk/refresh")
 async def refresh():
-    """Recompute risk for every zone using REAL Open-Meteo rainfall forecast
-    + current open incidents, then persist the assessments."""
+    """Recompute and persist risk assessments using available weather data."""
+
     zones = list_zones()
     incidents = list_incidents()
     results = []
 
     for z in zones:
         try:
-            weather = await get_weather(z["center_lat"], z["center_lng"])
-            rain_mm = accumulated_rainfall_next_hours(weather.get("hourly"), hours=3)
+            weather = await get_weather(
+                z["center_lat"],
+                z["center_lng"],
+            )
+
+            rain_mm = accumulated_rainfall_next_hours(
+                weather.get("hourly"),
+                hours=3,
+            )
+
+            weather_is_simulated = weather.get(
+                "is_simulated",
+                weather.get("data_type") != "weather_model_forecast",
+            )
+
         except Exception:
-            rain_mm = 0.0  # weather outage must never break the demo
+            rain_mm = 0.0
+            weather_is_simulated = True
 
         open_incidents = [
             i for i in incidents
-            if i.get("zone_id") == z["id"] and i["status"] != "resolved"
+            if i.get("zone_id") == z["id"]
+            and i["status"] != "resolved"
         ]
+
         result = calculate_risk(
             rainfall_score=rainfall_mm_to_score(rain_mm),
             terrain_score=z["terrain_score"],
             drainage_score=z["drainage_score"],
             incident_score=incident_score_from_reports(open_incidents),
-            is_simulated=False,
+            is_simulated=weather_is_simulated,
         )
-        saved = save_risk_assessment(z["id"], result)
-        results.append({"zone": z["name"], "zone_id": z["id"], **result, "assessment_id": saved["id"]})
 
-    results.sort(key=lambda r: r["risk_score"], reverse=True)
-    return {"refreshed": len(results), "ranking": results}
+        saved = save_risk_assessment(z["id"], result)
+
+        results.append({
+            "zone": z["name"],
+            "zone_id": z["id"],
+            **result,
+            "assessment_id": saved["id"],
+        })
+
+    results.sort(
+        key=lambda r: r["risk_score"],
+        reverse=True,
+    )
+
+    return {
+        "refreshed": len(results),
+        "ranking": results,
+    }
+
 
 
 @router.get("/risk")
