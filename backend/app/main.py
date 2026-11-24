@@ -14,7 +14,15 @@ app = FastAPI(
 )
 
 # CORS: allow the configured frontend origin plus common local dev ports.
-_allow = {settings.frontend_url, "http://localhost:3000", "http://127.0.0.1:3000"}
+_allow = {
+    settings.frontend_url,
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:3002",
+    "http://127.0.0.1:3002",
+}
 _allow.discard("")
 app.add_middleware(
     CORSMiddleware,
